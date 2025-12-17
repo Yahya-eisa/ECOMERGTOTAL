@@ -73,14 +73,12 @@ def fill_down(series):
     return series.ffill()
 
 def df_to_pdf_table(df, title="ECOMERG", group_name=""):
-    # تنسيق رقم الموبايل فقط
     if 'رقم موبايل العميل' in df.columns:
         df['رقم موبايل العميل'] = df['رقم موبايل العميل'].apply(
             lambda x: str(int(float(x))) if pd.notna(x) and str(x).replace('.','',1).isdigit()
             else ("" if pd.isna(x) else str(x))
         )
     
-    # تحويل الأرقام للأعمدة العددية فقط
     numeric_cols = {'عدد القطع', 'الكمية'}
     for col in df.columns:
         if col in numeric_cols:
@@ -89,7 +87,6 @@ def df_to_pdf_table(df, title="ECOMERG", group_name=""):
                 else ("" if pd.isna(x) else str(x))
             )
 
-    # الخط والـ styles
     styleN = ParagraphStyle(name='Normal', fontName='Arabic-Bold', fontSize=9,
                             alignment=1, wordWrap='RTL')
     styleBH = ParagraphStyle(name='Header', fontName='Arabic-Bold', fontSize=10,
@@ -103,7 +100,6 @@ def df_to_pdf_table(df, title="ECOMERG", group_name=""):
         data.append([Paragraph(fix_arabic("" if pd.isna(row[col]) else str(row[col])), styleN)
                      for col in df.columns])
 
-    # توزيع عرض الأعمدة
     base_col_widths_cm = [2, 2.5, 2, 3, 2, 2.5, 1.5, 1.5, 2.5, 3, 1.5, 1.5, 1, 1.5, 1.5]
     n_cols = len(df.columns)
 
@@ -145,7 +141,6 @@ st.set_page_config(page_title="🔥 ECOMERG Orders Processor", layout="wide")
 st.title("🔥 ECOMERG Orders Processor")
 st.markdown("....ارفع الملفات يا رايق علشان تستلم الشيت")
 
-# 🔹 إدخال اسم المجموعة من اليوزر
 group_name = st.text_input("اكتب اسم المجموعة اللي هيظهر في الـ PDF", value="FLASH")
 
 # ============ الجزء الأول: رفع وتحضير البيانات ============
@@ -237,53 +232,47 @@ if uploaded_files:
         
         merged_df = merged_df.drop(columns=['is_first'])
         
-        # ✅ إنشاء شيت المنتجات المجمعة
+        # ✅ إنشاء شيت المشتريات المجمعة
         products_df = merged_df.groupby(['اسم الصنف', 'اللون', 'المقاس'])['الكمية'].sum().reset_index()
         products_df.columns = ['اسم الصنف', 'اللون', 'المقاس', 'إجمالي الكمية']
         products_df = products_df.sort_values('إجمالي الكمية', ascending=False)
         
         # ============ الجزء الأول: تحميل الشيت للتعديل ============
         st.divider()
-        st.subheader("📋 الجزء الأول: البيانات المنظفة (للتعديل)")
+        st.subheader("📋 الجزء الأول: الشيت (للتعديل)")
         
-        buffer_clean = BytesIO()
-        with pd.ExcelWriter(buffer_clean, engine='openpyxl') as writer:
-            merged_df.to_excel(writer, sheet_name='البيانات المنظفة', index=False)
-            products_df.to_excel(writer, sheet_name='المنتجات المجمعة', index=False)
-        
-        buffer_clean.seek(0)
+        # ✅ تحميل الشيت منفصل
+        buffer_sheet = BytesIO()
+        merged_df.to_excel(buffer_sheet, sheet_name='الشيت', index=False, engine='openpyxl')
+        buffer_sheet.seek(0)
         
         tz = pytz.timezone('Africa/Cairo')
         today = datetime.datetime.now(tz).strftime("%Y-%m-%d")
-        file_name_clean = f"البيانات المنظفة - {today}.xlsx"
+        file_name_sheet = f"الشيت - {today}.xlsx"
         
         st.info("✅ احفظ الملف، عدّل فيه، ورفعه بعدين للخطوة الثانية")
         st.download_button(
-            label="⬇️ تحميل الشيت  (للتعديل) + المنتجات المجمعة",
-            data=buffer_clean.getvalue(),
-            file_name=file_name_clean,
+            label="⬇️ تحميل الشيت (للتعديل)",
+            data=buffer_sheet.getvalue(),
+            file_name=file_name_sheet,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_clean"
+            key="download_sheet"
         )
         
-        # ✅ تحميل المنتجات المجمعة بشكل منفصل
+        # ✅ تحميل المشتريات بشكل منفصل
         buffer_products = BytesIO()
-        products_df.to_excel(buffer_products, sheet_name='المنتجات المجمعة', index=False, engine='openpyxl')
+        products_df.to_excel(buffer_products, sheet_name='المشتريات', index=False, engine='openpyxl')
         buffer_products.seek(0)
         
-        file_name_products = f"المنتجات المجمعة - {today}.xlsx"
+        file_name_products = f"المشتريات - {today}.xlsx"
         
         st.download_button(
-            label="📦 تحميل المنتجات المجمعة فقط",
+            label="🛒 تحميل المشتريات فقط",
             data=buffer_products.getvalue(),
             file_name=file_name_products,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_products"
         )
-        
-        # عرض المنتجات المجمعة
-        st.write("**📦 المنتجات المجمعة:**")
-        st.dataframe(products_df, use_container_width=True)
         
         # ============ الجزء الثاني: رفع الملف المعدّل وتقسيم المناطق ============
         st.divider()
@@ -296,7 +285,7 @@ if uploaded_files:
         )
         
         if edited_file:
-            edited_df = pd.read_excel(edited_file, sheet_name='البيانات المنظفة', engine="openpyxl", dtype=str)
+            edited_df = pd.read_excel(edited_file, sheet_name='الشيت', engine="openpyxl", dtype=str)
             
             pdfmetrics.registerFont(TTFont('Arabic', 'Amiri-Regular.ttf'))
             pdfmetrics.registerFont(TTFont('Arabic-Bold', 'Amiri-Bold.ttf'))
