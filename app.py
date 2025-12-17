@@ -117,7 +117,7 @@ def df_to_pdf_table(df, title="ECOMERG", group_name=""):
 
     tz = pytz.timezone('Africa/Cairo')
     today = datetime.datetime.now(tz).strftime("%Y-%m-%d")
-    # هنا استخدم اسم المجموعة بدلاً من FLASH
+    # هنا استخدم اسم المجموعة بدلاً من 
     if group_name:
         title_text = f"{group_name} | {title} | {today}"
     else:
@@ -307,3 +307,4 @@ if uploaded_files:
                 mime="application/pdf",
                 key="download_pdf"
             )
+
