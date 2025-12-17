@@ -117,7 +117,6 @@ def df_to_pdf_table(df, title="ECOMERG", group_name=""):
 
     tz = pytz.timezone('Africa/Cairo')
     today = datetime.datetime.now(tz).strftime("%Y-%m-%d")
-    # هنا استخدم اسم المجموعة بدلاً من FLASH
     if group_name:
         title_text = f"{group_name} | {title} | {today}"
     else:
@@ -184,12 +183,9 @@ if uploaded_files:
         
         merged_df = merged_df.rename(columns=column_mapping)
         
-        required_cols = ['كود الاوردر', 'اسم العميل', 'المنطقة', 'العنوان', 'المدينة', 
+        required_cols = ['كود الاوردر', 'اسم العميل', 'العنوان', 'المدينة', 
                         'رقم موبايل العميل', 'حالة الاوردر', 'الملاحظات', 
                         'اسم الصنف', 'اللون', 'المقاس', 'الكمية', 'الإجمالي مع الشحن']
-        
-        # نحسب المنطقة
-        merged_df['المنطقة'] = merged_df['المدينة'].apply(classify_city)
         
         merged_df = merged_df[[c for c in required_cols if c in merged_df.columns]].copy()
         
@@ -241,12 +237,21 @@ if uploaded_files:
         
         merged_df = merged_df.drop(columns=['is_first'])
         
+        # ✅ إنشاء شيت المنتجات المجمعة
+        products_df = merged_df.groupby(['اسم الصنف', 'اللون', 'المقاس'])['الكمية'].sum().reset_index()
+        products_df.columns = ['اسم الصنف', 'اللون', 'المقاس', 'إجمالي الكمية']
+        products_df = products_df.sort_values('إجمالي الكمية', ascending=False)
+        
         # ============ الجزء الأول: تحميل الشيت للتعديل ============
         st.divider()
         st.subheader("📋 الجزء الأول: البيانات المنظفة (للتعديل)")
         
         buffer_clean = BytesIO()
-        merged_df.to_excel(buffer_clean, sheet_name='البيانات المنظفة', index=False, engine='openpyxl')
+        with pd.ExcelWriter(buffer_clean, engine='openpyxl') as writer:
+            merged_df.to_excel(writer, sheet_name='البيانات المنظفة', index=False)
+            # ✅ إضافة شيت المنتجات المجمعة
+            products_df.to_excel(writer, sheet_name='المنتجات المجمعة', index=False)
+        
         buffer_clean.seek(0)
         
         tz = pytz.timezone('Africa/Cairo')
@@ -255,12 +260,16 @@ if uploaded_files:
         
         st.info("✅ احفظ الملف، عدّل فيه، ورفعه بعدين للخطوة الثانية")
         st.download_button(
-            label="⬇️ تحميل البيانات المنظفة (للتعديل)",
+            label="⬇️ تحميل البيانات المنظفة (للتعديل) + المنتجات المجمعة",
             data=buffer_clean.getvalue(),
             file_name=file_name_clean,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_clean"
         )
+        
+        # عرض المنتجات المجمعة
+        st.write("**📦 المنتجات المجمعة:**")
+        st.dataframe(products_df, use_container_width=True)
         
         # ============ الجزء الثاني: رفع الملف المعدّل وتقسيم المناطق ============
         st.divider()
@@ -290,7 +299,6 @@ if uploaded_files:
                 for area_name in edited_df['المنطقة'].unique():
                     if pd.notna(area_name):
                         area_df = edited_df[edited_df['المنطقة'] == area_name].copy()
-                        # نمرر group_name عشان يكتب اسم المجموعة بدل FLASH
                         elements.extend(df_to_pdf_table(area_df.copy(),
                                                         title=str(area_name),
                                                         group_name=group_name))
