@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import io
 from io import BytesIO
 import pytz
 import arabic_reshaper
@@ -73,7 +72,7 @@ def replace_muaaqal_with_confirm_safe(df):
 def fill_down(series):
     return series.ffill()
 
-def df_to_pdf_table(df, title="FLASH"):
+def df_to_pdf_table(df, title="ECOMERG", group_name=""):
     # تنسيق رقم الموبايل فقط
     if 'رقم موبايل العميل' in df.columns:
         df['رقم موبايل العميل'] = df['رقم موبايل العميل'].apply(
@@ -104,14 +103,13 @@ def df_to_pdf_table(df, title="FLASH"):
         data.append([Paragraph(fix_arabic("" if pd.isna(row[col]) else str(row[col])), styleN)
                      for col in df.columns])
 
-    # ✅ توزيع عرض الأعمدة - متكيف مع عدد الأعمدة الفعلي
+    # توزيع عرض الأعمدة
     base_col_widths_cm = [2, 2.5, 2, 3, 2, 2.5, 1.5, 1.5, 2.5, 3, 1.5, 1.5, 1, 1.5, 1.5]
     n_cols = len(df.columns)
 
     if n_cols <= len(base_col_widths_cm):
         col_widths_cm = base_col_widths_cm[:n_cols]
     else:
-        # لو عندنا أعمدة زيادة نكرر آخر مقاس
         extra = n_cols - len(base_col_widths_cm)
         col_widths_cm = base_col_widths_cm + [base_col_widths_cm[-1]] * extra
 
@@ -119,7 +117,11 @@ def df_to_pdf_table(df, title="FLASH"):
 
     tz = pytz.timezone('Africa/Cairo')
     today = datetime.datetime.now(tz).strftime("%Y-%m-%d")
-    title_text = f"{title} | FLASH | {today}"
+    # هنا استخدم اسم المجموعة بدلاً من FLASH
+    if group_name:
+        title_text = f"{group_name} | {title} | {today}"
+    else:
+        title_text = f"{title} | {today}"
 
     elements = [
         Paragraph(fix_arabic(title_text), styleTitle),
@@ -140,9 +142,12 @@ def df_to_pdf_table(df, title="FLASH"):
     return elements
 
 # ---------- Streamlit App ----------
-st.set_page_config(page_title="🔥 Flash Orders Processor", layout="wide")
-st.title("🔥 Flash Orders Processor")
+st.set_page_config(page_title="🔥 ECOMERG Orders Processor", layout="wide")
+st.title("🔥 ECOMERG Orders Processor")
 st.markdown("....ارفع الملفات يا رايق علشان تستلم الشيت")
+
+# 🔹 إدخال اسم المجموعة من اليوزر
+group_name = st.text_input("اكتب اسم المجموعة اللي هيظهر في الـ PDF", value="FLASH")
 
 # ============ الجزء الأول: رفع وتحضير البيانات ============
 uploaded_files = st.file_uploader(
@@ -179,9 +184,12 @@ if uploaded_files:
         
         merged_df = merged_df.rename(columns=column_mapping)
         
-        required_cols = ['كود الاوردر', 'اسم العميل', 'العنوان', 'المدينة', 
+        required_cols = ['كود الاوردر', 'اسم العميل', 'المنطقة', 'العنوان', 'المدينة', 
                         'رقم موبايل العميل', 'حالة الاوردر', 'الملاحظات', 
                         'اسم الصنف', 'اللون', 'المقاس', 'الكمية', 'الإجمالي مع الشحن']
+        
+        # نحسب المنطقة
+        merged_df['المنطقة'] = merged_df['المدينة'].apply(classify_city)
         
         merged_df = merged_df[[c for c in required_cols if c in merged_df.columns]].copy()
         
@@ -256,7 +264,7 @@ if uploaded_files:
         
         # ============ الجزء الثاني: رفع الملف المعدّل وتقسيم المناطق ============
         st.divider()
-        st.subheader("🔄 الجزء الثاني: رفع الملف المعدّل وتقسيم المناطق")
+        st.subheader("🔄 الجزء الثاني: رفع الملف المعدّل وتقسيم المناطق (PDF)")
         
         edited_file = st.file_uploader(
             "📤 رفع الملف بعد التعديل",
@@ -265,12 +273,8 @@ if uploaded_files:
         )
         
         if edited_file:
-            # قراءة الملف المعدّل
             edited_df = pd.read_excel(edited_file, sheet_name='البيانات المنظفة', engine="openpyxl", dtype=str)
             
-            st.success("✅ تم قراءة الملف المعدّل بنجاح!")
-            
-            # ✅ إنشاء PDF بـ كل منطقة بـ جداول + عمود المنطقة
             pdfmetrics.registerFont(TTFont('Arabic', 'Amiri-Regular.ttf'))
             pdfmetrics.registerFont(TTFont('Arabic-Bold', 'Amiri-Bold.ttf'))
             
@@ -282,22 +286,22 @@ if uploaded_files:
             )
             elements = []
             
-            # تقسيم البيانات حسب المنطقة
             if 'المنطقة' in edited_df.columns:
                 for area_name in edited_df['المنطقة'].unique():
                     if pd.notna(area_name):
                         area_df = edited_df[edited_df['المنطقة'] == area_name].copy()
-                        # ✅ احتفظ بعمود المنطقة (ما نمسحش)
-                        elements.extend(df_to_pdf_table(area_df.copy(), title=str(area_name)))
+                        # نمرر group_name عشان يكتب اسم المجموعة بدل FLASH
+                        elements.extend(df_to_pdf_table(area_df.copy(),
+                                                        title=str(area_name),
+                                                        group_name=group_name))
             
             doc.build(elements)
             buffer_pdf.seek(0)
             
-            file_name_pdf = f"سواقين فلاش - {today}.pdf"
+            file_name_pdf = f"{group_name} - {today}.pdf"
             
-            # ✅ مباشرة زر التحميل بس
             st.download_button(
-                label="⬇️⬇️ تحميل ملف PDF النهائي (المناطق)",
+                label="⬇️⬇️ تحميل ملف PDF النهائي",
                 data=buffer_pdf.getvalue(),
                 file_name=file_name_pdf,
                 mime="application/pdf",
