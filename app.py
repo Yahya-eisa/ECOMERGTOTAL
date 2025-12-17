@@ -249,7 +249,6 @@ if uploaded_files:
         buffer_clean = BytesIO()
         with pd.ExcelWriter(buffer_clean, engine='openpyxl') as writer:
             merged_df.to_excel(writer, sheet_name='البيانات المنظفة', index=False)
-            # ✅ إضافة شيت المنتجات المجمعة
             products_df.to_excel(writer, sheet_name='المنتجات المجمعة', index=False)
         
         buffer_clean.seek(0)
@@ -260,11 +259,26 @@ if uploaded_files:
         
         st.info("✅ احفظ الملف، عدّل فيه، ورفعه بعدين للخطوة الثانية")
         st.download_button(
-            label="⬇️ تحميل البيانات المنظفة (للتعديل) + المنتجات المجمعة",
+            label="⬇️ تحميل الشيت  (للتعديل) + المنتجات المجمعة",
             data=buffer_clean.getvalue(),
             file_name=file_name_clean,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_clean"
+        )
+        
+        # ✅ تحميل المنتجات المجمعة بشكل منفصل
+        buffer_products = BytesIO()
+        products_df.to_excel(buffer_products, sheet_name='المنتجات المجمعة', index=False, engine='openpyxl')
+        buffer_products.seek(0)
+        
+        file_name_products = f"المنتجات المجمعة - {today}.xlsx"
+        
+        st.download_button(
+            label="📦 تحميل المنتجات المجمعة فقط",
+            data=buffer_products.getvalue(),
+            file_name=file_name_products,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_products"
         )
         
         # عرض المنتجات المجمعة
